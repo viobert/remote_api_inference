@@ -1,6 +1,7 @@
 """
-conda run -n inference python test/smoke_test.py \ 
-    --model gpt-5.4-nano-2026-03-17
+python test/smoke_test.py \
+    --provider vapi \
+    --model gpt-5.4-mini-low
 """
 
 from __future__ import annotations
@@ -9,34 +10,22 @@ import argparse
 import json
 import os
 from pathlib import Path
+import socket
+import sys
 from urllib import error, request
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_ENV_FILE = REPO_ROOT / ".env"
+SRC_ROOT = REPO_ROOT / "src"
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
+
+from inference.config import load_provider_config
+
+
+DEFAULT_PROVIDER = "vapi"
 DEFAULT_INPUT_FILE = REPO_ROOT / "data" / "input" / "smoke_test" / "smoke_test_input.jsonl"
 DEFAULT_OUTPUT_FILE = REPO_ROOT / "data" / "output" / "smoke_test" / "smoke_test_output.jsonl"
-
-
-def load_env_file(env_file: Path) -> None:
-    if not env_file.exists():
-        return
-
-    for raw_line in env_file.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
-            continue
-        key, sep, value = line.partition("=")
-        if not sep:
-            continue
-        os.environ.setdefault(key.strip(), value.strip().strip("'\""))
-
-
-def normalize_base_url(raw_base_url: str) -> str:
-    base_url = raw_base_url.strip().rstrip("/")
-    if not base_url.endswith("/v1"):
-        base_url = f"{base_url}/v1"
-    return base_url
 
 
 def iter_jsonl(path: Path):
@@ -56,7 +45,15 @@ def prepare_messages(record: dict) -> list[dict]:
     raise ValueError("Each JSONL row must contain either `prompt` or `messages`.")
 
 
-def call_vapi(*, api_key: str, base_url: str, model: str, messages: list[dict], temperature: float) -> dict:
+def call_chat_completions(
+    *,
+    api_key: str,
+    base_url: str,
+    model: str,
+    messages: list[dict],
+    temperature: float,
+    timeout_seconds: int,
+) -> dict:
     payload = {
         "model": model,
         "messages": messages,
@@ -75,13 +72,17 @@ def call_vapi(*, api_key: str, base_url: str, model: str, messages: list[dict], 
     )
 
     try:
-        with request.urlopen(req, timeout=120) as resp:
+        with request.urlopen(req, timeout=timeout_seconds) as resp:
             return json.loads(resp.read().decode("utf-8"))
     except error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
         raise RuntimeError(f"HTTP {exc.code}: {detail}") from exc
     except error.URLError as exc:
         raise RuntimeError(f"Network error: {exc.reason}") from exc
+    except TimeoutError as exc:
+        raise RuntimeError(f"Request timed out after {timeout_seconds}s.") from exc
+    except socket.timeout as exc:
+        raise RuntimeError(f"Request timed out after {timeout_seconds}s.") from exc
 
 
 def append_jsonl(path: Path, record: dict) -> None:
@@ -91,26 +92,26 @@ def append_jsonl(path: Path, record: dict) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Simple standalone V-API smoke test.")
-    parser.add_argument("--env-file", default=str(DEFAULT_ENV_FILE))
+    parser = argparse.ArgumentParser(description="Simple standalone provider smoke test.")
+    parser.add_argument("--provider", default=DEFAULT_PROVIDER)
     parser.add_argument("--input", default=str(DEFAULT_INPUT_FILE))
     parser.add_argument("--output", default=str(DEFAULT_OUTPUT_FILE))
     parser.add_argument("--model", required=True)
     parser.add_argument("--temperature", type=float, default=0.2)
+    parser.add_argument("--timeout", type=int, default=300)
     args = parser.parse_args()
 
-    load_env_file(Path(args.env_file))
+    provider_config = load_provider_config(args.provider)
+    if args.model not in provider_config.models:
+        raise ValueError(f"Model `{args.model}` is not defined in provider `{provider_config.name}`.")
 
-    api_key = os.environ.get("VAPI_API_KEY")
-    base_url = os.environ.get("VAPI_BASE_URL")
+    api_key = os.environ.get(provider_config.api_key_env)
     if not api_key:
-        raise ValueError("Missing VAPI_API_KEY in .env")
-    if not base_url:
-        raise ValueError("Missing VAPI_BASE_URL in .env")
+        raise ValueError(f"Missing `{provider_config.api_key_env}` in provider env files.")
 
-    base_url = normalize_base_url(base_url)
     input_path = Path(args.input)
     output_path = Path(args.output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
 
     with output_path.open("w", encoding="utf-8") as _:
         pass
@@ -118,12 +119,13 @@ def main() -> int:
     for line_number, record in iter_jsonl(input_path):
         record_id = str(record.get("id") or f"line-{line_number}")
         messages = prepare_messages(record)
-        response_json = call_vapi(
+        response_json = call_chat_completions(
             api_key=api_key,
-            base_url=base_url,
+            base_url=provider_config.base_url,
             model=args.model,
             messages=messages,
             temperature=args.temperature,
+            timeout_seconds=args.timeout,
         )
 
         output_record = {
@@ -138,4 +140,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

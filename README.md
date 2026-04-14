@@ -1,193 +1,127 @@
 # APIInference
 
-这是一个面向 `V-API` 的最小文本推理框架，先把你最需要的链路跑通：
+这是一个最小可用的 OpenAI 兼容批量推理框架。现在的配置拆成两层：
 
-- `jsonl` 输入
-- 调用 OpenAI 兼容的文本接口
-- `jsonl` 输出
-- 支持并发、重试、断点续跑
-- 自带一个最简单的 `test` 脚本
+- `configs/runs/*.yaml` 只描述一次运行任务
+- `configs/providers/*.yaml` 负责 provider 的连接信息、环境变量和模型定价
 
-## 目录推荐
+这样日常使用只需要关心三件事：
+
+- 选 `provider`
+- 选 `model`
+- 选 `input_path`
+
+## 目录
 
 ```text
 APIInference/
-├── .env.example
-├── .gitignore
-├── README.md
-├── data/
-│   ├── input/
-│   │   └── smoke_test/
-│   │       └── smoke_test_input.jsonl
-│   └── output/
-│       └── smoke_test/
-│           └── smoke_test_output.jsonl
+├── configs/
+│   ├── providers/
+│   │   └── vapi.yaml
+│   └── runs/
+│       └── default.yaml
+├── env/
+│   ├── examples/
+│   │   └── vapi.env.example
+│   └── local/
+│       └── .gitkeep
+├── scripts/
+│   └── run_batch.sh
 ├── src/
-│   └── api_inference/
-│       ├── __init__.py
-│       ├── __main__.py
-│       ├── cli.py
-│       ├── config.py
-│       ├── io_utils.py
-│       ├── stats.py
-│       └── vapi_client.py
+│   └── inference/
 └── test/
     └── smoke_test.py
 ```
 
-我同意你的判断：主代码放在 `src/` 更好。
+## 配置职责
 
-原因很直接：
+`configs/runs/default.yaml`
 
-- 业务代码和测试、数据分开，后面扩展不会乱
-- 避免根目录随手堆脚本
-- 后面如果加 `pyproject.toml`、打包、单测都会更顺
-
-## 三种 env 文件的区别
-
-### `.env`
-
-这是你本地真正要用的配置文件，通常会放：
-
-- `VAPI_API_KEY`
-- `VAPI_BASE_URL`
-
-这个文件里可能有真实密钥，所以必须加入 `.gitignore`。
-
-### `.env.local`
-
-这是一个可选的“本地覆盖文件”约定，也应该忽略。
-
-它通常用于：
-
-- 同一个项目里临时换一套本地配置
-- 你不想改主 `.env`，只想在自己机器上覆盖一部分变量
-
-这版程序当前主要读取你显式传入的 `--env-file`，所以你现在只用 `.env` 就够了。把 `.env.local` 也忽略掉，是为了以后扩展时不把本地私货提交上去。
-
-### `.env.example`
-
-这是模板文件，不放真实密钥，只放占位符，所以它应该提交到仓库里。
-
-它的作用是：
-
-- 告诉别人这个项目需要哪些环境变量
-- 给你自己留一个安全模板
-
-所以：
-
-- `.env` 要忽略
-- `.env.local` 要忽略
-- `.env.example` 不应该忽略
-
-## 先做什么
-
-先复制模板：
-
-```bash
-cp .env.example .env
+```yaml
+provider: vapi
+model: gpt-5.4-mini-low
+input_path: data/input/smoke_test/smoke_test_input.jsonl
 ```
 
-然后填上你自己的 key 和 base url。
+`configs/providers/vapi.yaml`
 
-## 最简单的可运行测试
+```yaml
+name: vapi
 
-你现在最先用这个文件：
+api:
+  env_files:
+    - env/local/vapi.env
+  api_key_env: VAPI_API_KEY
+  base_url_env: VAPI_BASE_URL
+  base_url: https://api.gpt.ge/v1
 
-`test/smoke_test.py`
+models:
+  gpt-5.4-mini-low:
+    pricing:
+      input_per_1k_usd: 0.00075
+      output_per_1k_usd: 0.0045
+```
 
-它会做一件很简单的事：
+说明：
 
-- 从 `data/input/smoke_test/smoke_test_input.jsonl` 读取输入
-- 逐条请求 V-API
-- 把完整返回写到 `data/output/smoke_test/smoke_test_output.jsonl`
+- provider 配置里维护连接方式和 pricing，不再放到外层 run config
+- 默认优先读取 `env/local/vapi.env`
 
-运行方式：
+## 环境变量目录
+
+推荐把真实密钥放在：
+
+```bash
+env/local/vapi.env
+```
+
+模板文件在：
+
+```bash
+env/examples/vapi.env.example
+```
+
+初始化：
+
+```bash
+mkdir -p env/local
+cp env/examples/vapi.env.example env/local/vapi.env
+```
+
+`env/local/` 已加入 `.gitignore`，真实密钥就放这里，不再依赖根目录 `.env`。
+
+## 运行
+
+批量运行：
 
 ```bash
 cd /home/viobert/mkx/coding/proj/APIInference
-conda run -n inference python test/smoke_test.py --model 你可用的模型名
+scripts/run_batch.sh
 ```
 
-例如：
-
-```bash
-conda run -n inference python test/smoke_test.py --model gpt-4o-mini
-```
-
-前提是 `.env` 已经填好。
-
-## 批量运行 CLI
-
-主框架代码在 `src/api_inference/cli.py`。
-
-如果你要跑批量 `jsonl`，用下面这个：
+或者显式指定某个 run config：
 
 ```bash
 cd /home/viobert/mkx/coding/proj/APIInference
-PYTHONPATH=src conda run -n inference python -m api_inference run \
-  --env-file .env \
-  --input data/input/smoke_test/smoke_test_input.jsonl \
-  --output data/output/run_output.jsonl \
-  --model 你可用的模型名 \
-  --concurrency 4 \
-  --temperature 0.2
+scripts/run_batch.sh configs/runs/default.yaml
 ```
 
-列出你当前 key 可用模型：
+smoke test：
 
 ```bash
 cd /home/viobert/mkx/coding/proj/APIInference
-PYTHONPATH=src conda run -n inference python -m api_inference models --env-file .env
+conda run -n inference python test/smoke_test.py \
+  --provider vapi \
+  --model gpt-5.4-mini-low
 ```
 
-统计输出文件：
+## 输出目录
 
-```bash
-cd /home/viobert/mkx/coding/proj/APIInference
-PYTHONPATH=src conda run -n inference python -m api_inference stats --input data/output/run_output.jsonl
+输出和日志现在会按 `provider/model/run_timestamp` 分层，时间格式是 `yy-mm-dd_HHMMSS`，例如：
+
+```text
+data/output/vapi/gpt-5.4-mini-low/26-04-14_153045/
+log/vapi/gpt-5.4-mini-low/26-04-14_153045/
 ```
 
-## 输入格式
-
-每行一个 JSON 对象，支持两种写法。
-
-### 最简单写法
-
-```json
-{"id":"demo-1","prompt":"请用一句话解释什么是梯度下降。"}
-```
-
-### 聊天写法
-
-```json
-{
-  "id": "demo-2",
-  "messages": [
-    {"role": "system", "content": "你是一个严谨的中文助手。"},
-    {"role": "user", "content": "请概括牛顿第一定律。"}
-  ],
-}
-```
-
-## 输出格式
-
-成功记录会包含这些核心字段：
-
-- `id`
-- `response`
-
-这里的 `response` 就是 API 返回的完整原始 JSON。当前这个 smoke 样例只保留 `id` 和 `response`，不再额外提取字段。
-
-## 下一步
-
-你先做两步：
-
-1. 填 `.env`
-2. 跑 `test/smoke_test.py`
-
-你把实际可用模型名告诉我后，我下一轮就继续给你补：
-
-- 更贴近你任务的数据 schema
-- 批量运行的配置文件
-- 更细的统计模块
+这样同名模型挂在不同 provider 下时不会混在一起，同一天多次运行也不会互相覆盖。

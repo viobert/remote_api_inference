@@ -1,0 +1,19 @@
+provider: vapi
+model: gpt-5.4-mini-low
+
+input_path: data/input/smoke_test/smoke_test_input.jsonl
+output_root: data/output
+log_root: log
+
+temperature: 0.2
+max_tokens: null
+
+concurrency: 16
+timeout_seconds: 300
+
+retry:
+  max_retries: 3
+  initial_delay_seconds: 2
+  backoff_multiplier: 2
+  max_delay_seconds: 64
+  retry_status_codes: [408, 409, 429, 500, 502, 503, 504]

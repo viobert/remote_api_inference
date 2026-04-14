@@ -1,0 +1,22 @@
+name: vapi
+
+api:
+  env_files:
+    - env/local/vapi.env
+  api_key_env: VAPI_API_KEY
+  base_url_env: VAPI_BASE_URL
+  base_url: https://api.gpt.ge/v1
+
+models:
+  gpt-5.4-nano-low:
+    pricing:
+      input_per_1k_usd: 0.0002
+      output_per_1k_usd: 0.00125
+  gpt-5.4-nano-2026-03-17:
+    pricing:
+      input_per_1k_usd: 0.0002
+      output_per_1k_usd: 0.00125
+  gpt-5.4-mini-low:
+    pricing:
+      input_per_1k_usd: 0.00075
+      output_per_1k_usd: 0.0045

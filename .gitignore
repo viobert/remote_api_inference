@@ -1,8 +1,13 @@
 .env
 .env.local
+.vscode/
+env/local/*
+!env/local/.gitkeep
 __pycache__/
 *.pyc
 .pytest_cache/
+output/
+log/
 data/input/
 !data/input/smoke_test/
 data/output/
