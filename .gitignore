@@ -1,0 +1,11 @@
+.env
+.env.local
+__pycache__/
+*.pyc
+.pytest_cache/
+data/input/
+!data/input/smoke_test/
+data/output/
+!data/output/smoke_test/
+dist/
+build/
