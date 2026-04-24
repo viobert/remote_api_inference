@@ -1,0 +1,19 @@
+provider: vapi
+model: gpt-5.4-medium
+
+input_path: data/input/line_number_eval/gpt_5_4_medium_line_number_input.jsonl
+output_root: data/output
+log_root: log
+
+temperature: 0
+max_tokens: 8
+
+concurrency: 12
+timeout_seconds: 300
+
+retry:
+  max_retries: 3
+  initial_delay_seconds: 2
+  backoff_multiplier: 2
+  max_delay_seconds: 64
+  retry_status_codes: [408, 409, 429, 500, 502, 503, 504]

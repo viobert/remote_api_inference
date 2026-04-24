@@ -20,3 +20,7 @@ models:
     pricing:
       input_per_1k_usd: 0.00075
       output_per_1k_usd: 0.0045
+  gpt-5.4-medium:
+    pricing:
+      input_per_1k_usd: 0.0025
+      output_per_1k_usd: 0.015

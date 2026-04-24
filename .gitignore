@@ -14,3 +14,4 @@ data/output/
 !data/output/smoke_test/
 dist/
 build/
+AGENTS.md
