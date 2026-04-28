@@ -70,15 +70,24 @@ def extract_text(response_json: dict[str, Any]) -> str:
     return str(content)
 
 
+def model_filename_component(model: str) -> str:
+    if not model:
+        raise ValueError("Model name must not be empty.")
+    if "/" in model or "\\" in model:
+        raise ValueError(f"Model name `{model}` cannot be used in an output filename.")
+    return model
+
+
 def build_run_paths(config: AppConfig) -> RunPaths:
     run_timestamp = datetime.now().strftime("%y-%m-%d_%H%M%S")
     input_stem = config.input_path.stem
+    model_stem = model_filename_component(config.model)
     output_dir = config.output_root / config.provider / config.model / run_timestamp
     log_dir = config.log_root / config.provider / config.model / run_timestamp
     output_dir.mkdir(parents=True, exist_ok=True)
     log_dir.mkdir(parents=True, exist_ok=True)
     return RunPaths(
-        output_file=output_dir / f"{input_stem}_output.jsonl",
+        output_file=output_dir / f"{input_stem}_{model_stem}_output.jsonl",
         status_file=output_dir / f"{input_stem}_status.jsonl",
         log_file=log_dir / f"{input_stem}.log",
     )
