@@ -1,12 +1,12 @@
 provider: vapi
 model: gpt-5.4-medium
 
-input_path: data/input/line_number_eval/gpt_5_4_medium_line_number_input.jsonl
+input_path: data/input/line_number_eval/vulnerability_split_v1_test_line_v1_prompts.jsonl
 output_root: data/output
 log_root: log
 
 temperature: 0
-max_tokens: 8
+max_tokens: 1024
 
 concurrency: 12
 timeout_seconds: 300

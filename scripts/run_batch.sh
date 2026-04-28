@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TARGET="${1:-default}"
+TARGET="${1:-eval}"
 
 if [[ -f "$TARGET" ]]; then
   CONFIG_PATH="$TARGET"
